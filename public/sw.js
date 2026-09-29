@@ -1,0 +1,54 @@
+const CACHE = '0815-podcast-shell-v4';
+const SHELL = [
+  './',
+  './index.html',
+  './assets/app.css',
+  './assets/app.js',
+  './manifest.webmanifest',
+  './datenschutz.html',
+  './impressum.html'
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  const networkFirst = request.mode === 'navigate'
+    || url.pathname.endsWith('/index.html')
+    || url.pathname.endsWith('/assets/app.js')
+    || url.pathname.endsWith('/assets/app.css')
+    || url.pathname.endsWith('/catalog.json')
+    || url.pathname.includes('/data/');
+
+  if (!networkFirst) {
+    event.respondWith(caches.match(request).then(hit => hit || fetch(request)));
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then(response => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
+  );
+});

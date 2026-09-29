@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Fixture Podcast</title>
+    <description><![CDATA[<p>Ein <strong>Test</strong> &amp; Beispiel.</p>]]></description>
+    <link>https://example.org/podcast</link>
+    <language>de</language>
+    <itunes:author>Fixture Redaktion</itunes:author>
+    <item>
+      <guid>episode-1</guid>
+      <title>Erste Folge</title>
+      <description><![CDATA[<p>Hallo <strong>Welt</strong> &amp; mehr.</p>]]></description>
+      <pubDate>Tue, 29 Sep 2026 12:15:00 +0200</pubDate>
+      <itunes:duration>01:02:03</itunes:duration>
+      <enclosure url="https://media.example.org/episode-1.mp3" type="audio/mpeg"/>
+    </item>
+    <item>
+      <guid>episode-2</guid>
+      <title>Zweite Folge</title>
+      <description><![CDATA[<p>Zweite <em>Beschreibung</em>.</p>]]></description>
+      <pubDate>Mon, 28 Sep 2026 08:30:00 +0000</pubDate>
+      <itunes:duration>25:10</itunes:duration>
+      <enclosure url="https://media.example.org/episode-2.mp3" type="audio/mpeg"/>
+    </item>
+    <item>
+      <guid>no-enclosure</guid>
+      <title>Ohne Enclosure</title>
+      <pubDate>Sun, 27 Sep 2026 10:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <guid>http-audio</guid>
+      <title>HTTP-Folge</title>
+      <pubDate>Sat, 26 Sep 2026 10:00:00 +0000</pubDate>
+      <enclosure url="http://media.example.org/episode-4.mp3" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>

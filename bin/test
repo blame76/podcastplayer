@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+php -l tools/build.php
+php -r '$d=json_decode(file_get_contents("catalog.json"), true, 512, JSON_THROW_ON_ERROR); if (!$d) { fwrite(STDERR,"catalog empty\n"); exit(1); } echo "catalog OK\n";'
+node --check public/assets/app.js
+node --check public/sw.js
+php tests/rss_parser_test.php
+node tests/player.test.js
+
+grep -q "feeds.br.de/der-ki-podcast/feed.xml" catalog.json
+grep -q "MediaMetadata" public/assets/app.js
+grep -q "SAVE_INTERVAL_MS = 5000" public/assets/app.js
+grep -q "INBOX_LIMIT = 10" public/assets/app.js
+grep -q "PER_PODCAST_INBOX_LIMIT = 3" public/assets/app.js
+grep -q "PLAYLIST_LIMIT = 10" public/assets/app.js
+grep -q "DETAIL_PAGE_SIZE = 10" public/assets/app.js
+grep -q "Alte Folgen ausblenden" public/assets/app.js
+! grep -q "count(\$episodes) >= 50" tools/build.php
+
+echo "tests OK"
