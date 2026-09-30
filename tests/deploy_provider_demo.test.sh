@@ -24,28 +24,28 @@ export TEST_SFTP_BATCH="$test_dir/batch"
 export PATH="$test_dir/fake-bin:$PATH"
 
 bin/deploy-provider-demo --plan > "$test_dir/plan"
-rg -q 'src/App.php' "$test_dir/plan"
+grep -q 'src/App.php' "$test_dir/plan"
 test ! -e "$TEST_SFTP_BATCH"
 
 bin/deploy-provider-demo --check > /dev/null
-rg -q '^cd /webroot/0815/podcast-provider-demo$' "$TEST_SFTP_BATCH"
-if rg -q '^put ' "$TEST_SFTP_BATCH"; then
+grep -q '^cd /webroot/0815/podcast-provider-demo$' "$TEST_SFTP_BATCH"
+if grep -q '^put ' "$TEST_SFTP_BATCH"; then
   echo '--check attempted an upload' >&2
   exit 1
 fi
 
 bin/deploy-provider-demo --upload > /dev/null
-test "$(rg -c '^put ' "$TEST_SFTP_BATCH")" -eq 10
+test "$(grep -c '^put ' "$TEST_SFTP_BATCH")" -eq 10
 for file in .htaccess catalog.php podcasts.php src/App.php src/Demo.php src/Rss.php src/bootstrap.php \
   audio/bewusst-hoeren.wav audio/willkommen.wav audio/zehn-sekunden.wav; do
-  rg -q -F "put $file $file" "$TEST_SFTP_BATCH"
+  grep -q -F "put $file $file" "$TEST_SFTP_BATCH"
 done
-if rg -q 'config|router|README|generate_demo_audio' "$TEST_SFTP_BATCH"; then
+if grep -q 'config|router|README|generate_demo_audio' "$TEST_SFTP_BATCH"; then
   echo 'non-runtime file in upload batch' >&2
   exit 1
 fi
-rg -q -F -- '-oStrictHostKeyChecking=yes' "$TEST_SFTP_ARGS"
-rg -q -F -- '-oPasswordAuthentication=no' "$TEST_SFTP_ARGS"
+grep -q -F -- '-oStrictHostKeyChecking=yes' "$TEST_SFTP_ARGS"
+grep -q -F -- '-oPasswordAuthentication=no' "$TEST_SFTP_ARGS"
 
 export PODCAST_SFTP_TARGET=/webroot/other
 if bin/deploy-provider-demo --upload > /dev/null 2>&1; then
