@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+usage() {
+  cat <<'HELP'
+Usage: bin/deploy-provider-demo --plan|--check|--upload
+
+Required environment variables:
+  PODCAST_SFTP_HOST        Strato SFTP host
+  PODCAST_SFTP_USER        Strato SFTP user
+  PODCAST_SFTP_KEY         Absolute path to the private SSH key
+  PODCAST_SFTP_TARGET      Existing SFTP directory ending in /0815/podcast-provider-demo
+Optional:
+  PODCAST_SFTP_PORT        SSH port (default: 22)
+
+--plan shows the upload selection without connecting.
+--check verifies SSH login and the target directory without uploading.
+--upload transfers only the public demo provider runtime and original WAV files.
+HELP
+}
+
+if [[ $# -ne 1 ]]; then usage >&2; exit 2; fi
+mode=$1
+case "$mode" in
+  --plan|--check|--upload) ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+: "${PODCAST_SFTP_HOST:?Set PODCAST_SFTP_HOST}"
+: "${PODCAST_SFTP_USER:?Set PODCAST_SFTP_USER}"
+: "${PODCAST_SFTP_KEY:?Set PODCAST_SFTP_KEY}"
+: "${PODCAST_SFTP_TARGET:?Set PODCAST_SFTP_TARGET}"
+port=${PODCAST_SFTP_PORT:-22}
+
+if [[ ! $PODCAST_SFTP_HOST =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ||
+      ! $PODCAST_SFTP_USER =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ||
+      ! $port =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
+  echo 'Invalid SFTP host, user or port.' >&2
+  exit 2
+fi
+
+target=${PODCAST_SFTP_TARGET%/}
+if [[ ! $target =~ ^/[A-Za-z0-9._/-]+$ || $target != */0815/podcast-provider-demo ]]; then
+  echo 'PODCAST_SFTP_TARGET must be an absolute SFTP path ending in /0815/podcast-provider-demo.' >&2
+  exit 2
+fi
+IFS='/' read -r -a path_parts <<< "$target"
+for part in "${path_parts[@]}"; do
+  if [[ $part == . || $part == .. ]]; then
+    echo 'SFTP target must not contain . or .. path components.' >&2
+    exit 2
+  fi
+done
+
+files=(
+  src/App.php src/Demo.php src/Rss.php src/bootstrap.php
+  audio/bewusst-hoeren.wav audio/willkommen.wav audio/zehn-sekunden.wav
+  catalog.php podcasts.php .htaccess
+)
+for file in "${files[@]}"; do
+  if [[ ! -f provider/php/$file ]]; then
+    echo "Missing local provider file: $file" >&2
+    exit 1
+  fi
+done
+
+if [[ $mode == --plan ]]; then
+  printf 'Destination: %s@%s:%s (port %s)\n' "$PODCAST_SFTP_USER" "$PODCAST_SFTP_HOST" "$target" "$port"
+  printf 'Upload files:\n'
+  printf '  %s\n' "${files[@]}"
+  exit 0
+fi
+
+if [[ ! -r $PODCAST_SFTP_KEY || ! -f $PODCAST_SFTP_KEY ]]; then
+  echo 'PODCAST_SFTP_KEY must point to a readable private key file.' >&2
+  exit 2
+fi
+
+stage=$(mktemp -d)
+trap 'rm -rf -- "$stage"' EXIT
+mkdir "$stage/src" "$stage/audio"
+for file in "${files[@]}"; do
+  cp -- "provider/php/$file" "$stage/$file"
+done
+
+{
+  printf 'lcd %s\n' "$stage"
+  printf 'cd %s\n' "$target"
+  printf 'pwd\n'
+  if [[ $mode == --upload ]]; then
+    printf '%s\n' '-mkdir src' '-mkdir audio'
+    for file in "${files[@]}"; do
+      printf 'put %s %s\n' "$file" "$file"
+    done
+    printf '%s\n' 'ls -l catalog.php podcasts.php .htaccess'
+  fi
+} | sftp -P "$port" -i "$PODCAST_SFTP_KEY" \
+  -oBatchMode=yes -oIdentitiesOnly=yes -oStrictHostKeyChecking=yes \
+  -oPasswordAuthentication=no -oKbdInteractiveAuthentication=no \
+  -b - "$PODCAST_SFTP_USER@$PODCAST_SFTP_HOST"
+
+if [[ $mode == --upload ]]; then
+  echo 'Upload complete. Verify /catalog, /podcasts, CORS, audio and source access over HTTPS.'
+fi

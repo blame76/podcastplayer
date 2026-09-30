@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+'use strict';
+
+const assert = require('node:assert/strict');
+
+const rawBase = process.env.PODCAST_PROVIDER_PUBLIC_URL || 'https://blame76.com/0815/podcast-provider-demo/';
+const base = new URL(rawBase.endsWith('/') ? rawBase : `${rawBase}/`);
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
+assert(base.protocol === 'https:' || (isLocal && base.protocol === 'http:'), 'Provider URL must use HTTPS');
+assert(!base.username && !base.password && !base.search && !base.hash, 'Invalid provider URL');
+const origin = 'https://blame76.github.io';
+
+async function request(path, options = {}) {
+  const response = await fetch(new URL(path, base), {
+    ...options,
+    signal: AbortSignal.timeout(15000),
+  });
+  return response;
+}
+
+async function jsonResponse(path, options) {
+  const response = await request(path, options);
+  assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
+  assert.match(response.headers.get('content-type') || '', /application\/json/i);
+  return { response, data: await response.json() };
+}
+
+function checkCors(response) {
+  const allowed = response.headers.get('access-control-allow-origin');
+  assert(allowed === '*' || allowed === origin, `Unexpected CORS origin: ${allowed}`);
+}
+
+async function main() {
+  const catalog = await jsonResponse('catalog', { headers: { Origin: origin } });
+  checkCors(catalog.response);
+  assert.equal(catalog.data.provider?.contract, '0815-podcast-provider-v1');
+  assert.deepEqual(catalog.data.podcasts?.map((podcast) => podcast.id), ['0815-demo']);
+
+  const preflight = await request('podcasts', {
+    method: 'OPTIONS',
+    headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+  });
+  assert.equal(preflight.status, 204, `CORS preflight: HTTP ${preflight.status}`);
+  checkCors(preflight);
+  assert.match(preflight.headers.get('access-control-allow-methods') || '', /\bPOST\b/);
+
+  const detail = await jsonResponse('podcasts', {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: ['0815-demo'] }),
+  });
+  checkCors(detail.response);
+  assert.equal(detail.data.podcasts?.length, 1);
+  const podcast = detail.data.podcasts[0];
+  assert.equal(podcast.id, '0815-demo');
+  assert.equal(podcast.episodes?.length, 3);
+  for (const episode of podcast.episodes) {
+    assert.equal(episode.audioType, 'audio/wav');
+    const audio = new URL(episode.audioUrl);
+    assert.equal(audio.origin, base.origin);
+    assert(audio.pathname.startsWith(`${base.pathname}audio/`));
+    const response = await fetch(audio, { method: 'HEAD', signal: AbortSignal.timeout(15000) });
+    assert.equal(response.status, 200, `${audio.pathname}: HTTP ${response.status}`);
+  }
+
+  const source = await request('src/App.php');
+  assert(!source.ok, 'PHP source directory is publicly accessible');
+  console.log(`Provider demo OK: catalog, CORS, 3 audio files and protected PHP source at ${base.href}`);
+}
+
+main().catch((error) => {
+  console.error(`Provider demo verification failed: ${error.message}`);
+  process.exitCode = 1;
+});

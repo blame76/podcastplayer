@@ -19,3 +19,7 @@ PODCAST_PROVIDER_BASE_URL=http://127.0.0.1:8001/ php -S 127.0.0.1:8001 -t provid
 Falls Shared Hosting eine lokale `config.php` erfordert: Sie ist in `.gitignore` ausgeschlossen; `.htaccess` sperrt direkten Webzugriff. Für andere Webserver dieselbe Sperre ausdrücklich konfigurieren. Keine Konfigurationsdatei öffentlich als Text ausliefern.
 
 Bei jedem privaten `POST /podcasts` ruft die Referenz die angeforderten freigegebenen Feeds live ab; sie führt keine Hintergrundsynchronisation aus. Die private Implementierung ruft ausschließlich serverseitig freigegebene Feeds ab, begrenzt Größe und Redirects, prüft öffentliche Ziel-IP-Adressen und gibt nur normalisierte JSON-Daten aus. Audio wird nicht gespiegelt. Der Provider kann IP-Adresse und Request-Metadaten über normale Hosting-Logs verarbeiten; der PHP-Code protokolliert keine Hörhistorie, Abos, Playlist, Positionen, Tokens oder Request-Bodies. Betreiber klären die Berechtigung zur Nutzung der eingebundenen Feeds und Inhalte selbst.
+
+## Deployment
+
+Für den Strato SFTP Upload per GitHub Actions und die anschließende Veröffentlichung des Players auf GitHub Pages siehe [Deployment-Anleitung](../../docs/deployment.md). Der Upload enthält nur die öffentliche Demo Laufzeit und die drei eigenen Audiodateien.
