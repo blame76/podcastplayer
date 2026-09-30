@@ -1,0 +1,7 @@
+Options -Indexes
+RewriteEngine On
+RewriteRule ^(catalog|podcasts)/?$ $1.php [L]
+RewriteRule ^src/ - [F,L]
+<FilesMatch "^(config(\.example)?\.php|router\.php)$">
+    Require all denied
+</FilesMatch>

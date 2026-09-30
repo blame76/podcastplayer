@@ -1,9 +1,10 @@
-const CACHE = '0815-podcast-shell-v4';
+const CACHE = '0815-podcast-shell-v5';
 const SHELL = [
   './',
   './index.html',
   './assets/app.css',
   './assets/app.js',
+  './assets/provider-client.js',
   './manifest.webmanifest',
   './datenschutz.html',
   './impressum.html'
@@ -32,8 +33,7 @@ self.addEventListener('fetch', event => {
     || url.pathname.endsWith('/index.html')
     || url.pathname.endsWith('/assets/app.js')
     || url.pathname.endsWith('/assets/app.css')
-    || url.pathname.endsWith('/catalog.json')
-    || url.pathname.includes('/data/');
+    || url.pathname.endsWith('/assets/provider-client.js');
 
   if (!networkFirst) {
     event.respondWith(caches.match(request).then(hit => hit || fetch(request)));

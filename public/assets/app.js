@@ -3,6 +3,8 @@
 
   const STORAGE_KEY = '0815podcast:v3';
   const LEGACY_STORAGE_KEY = '0815podcast:v2';
+  const PROVIDER_KEY = '0815podcast:provider:v1';
+  const PROVIDER_TOKEN_KEY = '0815podcast:provider-token:v1';
   const SAVE_INTERVAL_MS = 5000;
   const INBOX_LIMIT = 10;
   const PER_PODCAST_INBOX_LIMIT = 3;
@@ -27,12 +29,24 @@
     restoreListener: null,
     restorePending: false,
     restoreToken: 0,
+    providerConfig: null,
+    providerToken: '',
+    providerClient: null,
+    providerRequestId: 0,
     initialized: false
   };
 
   const el = {
     statusPanel: document.querySelector('#status-panel'),
     status: document.querySelector('#app-status'),
+    providerActive: document.querySelector('#provider-active'),
+    providerUrl: document.querySelector('#provider-url'),
+    providerToken: document.querySelector('#provider-token'),
+    providerTest: document.querySelector('#provider-test'),
+    providerSave: document.querySelector('#provider-save'),
+    providerDemo: document.querySelector('#provider-demo'),
+    providerMessage: document.querySelector('#provider-message'),
+    dataGeneratedAt: document.querySelector('#data-generated-at'),
     viewTabs: document.querySelector('#view-tabs'),
     tabButtons: [...document.querySelectorAll('[data-view]')],
     subscriptionsView: document.querySelector('#subscriptions-view'),
@@ -101,44 +115,118 @@
     }));
   }
 
-  async function getJson(url) {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    return response.json();
+  function loadProviderSettings() {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(PROVIDER_KEY) || 'null');
+      if (saved?.baseUrl) saved.baseUrl = ProviderClient.validateUrl(saved.baseUrl);
+    } catch {
+      saved = null;
+    }
+    state.providerConfig = saved?.baseUrl
+      ? { name: typeof saved.name === 'string' ? saved.name : 'Feed Provider', baseUrl: saved.baseUrl }
+      : { ...ProviderClient.DEFAULT_PROVIDER };
+    state.providerToken = state.providerConfig.baseUrl === ProviderClient.DEFAULT_PROVIDER.baseUrl
+      ? '' : (localStorage.getItem(PROVIDER_TOKEN_KEY) || '');
+    el.providerUrl.value = state.providerConfig.baseUrl;
+    el.providerToken.value = state.providerToken;
+  }
+
+  function persistProviderSettings(config, token) {
+    localStorage.setItem(PROVIDER_KEY, JSON.stringify({ name: config.name, baseUrl: config.baseUrl }));
+    if (token) localStorage.setItem(PROVIDER_TOKEN_KEY, token);
+    else localStorage.removeItem(PROVIDER_TOKEN_KEY);
+  }
+
+  function resetPlayerForProviderChange() {
+    saveCurrentPosition();
+    el.audio.pause();
+    stopPositionTimer();
+    if (state.restoreListener) {
+      el.audio.removeEventListener('loadedmetadata', state.restoreListener);
+      el.audio.removeEventListener('durationchange', state.restoreListener);
+      state.restoreListener = null;
+    }
+    state.restoreToken++;
+    state.restorePending = false;
+    state.currentEpisode = null;
+    state.currentPodcast = null;
+    el.audio.removeAttribute('src');
+    el.audio.load();
+    el.player.hidden = true;
+  }
+
+  function showGeneratedAt(value) {
+    const date = new Date(value);
+    el.dataGeneratedAt.hidden = Number.isNaN(date.getTime());
+    if (!el.dataGeneratedAt.hidden) {
+      el.dataGeneratedAt.textContent = `Stand: ${new Intl.DateTimeFormat('de-DE', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(date)}`;
+    }
+  }
+
+  async function loadProvider(config, token) {
+    const requestId = ++state.providerRequestId;
+    const baseUrl = ProviderClient.validateUrl(config.baseUrl);
+    const effectiveToken = baseUrl === ProviderClient.DEFAULT_PROVIDER.baseUrl ? '' : token;
+    const client = new ProviderClient(baseUrl, effectiveToken);
+    const catalog = await client.catalog();
+    const podcastData = await client.podcasts(catalog.podcasts.map(item => item.id));
+    if (requestId !== state.providerRequestId) return null;
+
+    resetPlayerForProviderChange();
+    state.providerClient = client;
+    state.providerConfig = { name: catalog.provider.name, baseUrl };
+    state.providerToken = effectiveToken;
+    state.catalog = catalog.podcasts;
+    state.podcasts = new Map(podcastData.podcasts.map(podcast => [podcast.id, podcast]));
+    migrateLegacyEpisodeState();
+    state.detailPodcastId = null;
+    el.detailSection.hidden = true;
+    el.providerActive.textContent = `Aktiv: ${catalog.provider.name}`;
+    showGeneratedAt(podcastData.generatedAt);
+
+    if (!state.initialized) {
+      if (state.catalog.length === 1) state.subscriptions.add(state.catalog[0].id);
+      state.initialized = true;
+      persistLocalState();
+    }
+
+    cleanPlaylist();
+    el.statusPanel.hidden = true;
+    el.viewTabs.hidden = false;
+    render();
+    return state.providerConfig;
+  }
+
+  function clearProviderData() {
+    ++state.providerRequestId;
+    resetPlayerForProviderChange();
+    state.providerClient = null;
+    state.catalog = [];
+    state.podcasts = new Map();
+    state.detailPodcastId = null;
+    el.detailSection.hidden = true;
+    el.viewTabs.hidden = true;
+    el.statusPanel.hidden = false;
+    el.status.textContent = 'Demo-Provider wird geladen …';
+    el.dataGeneratedAt.hidden = true;
+  }
+
+  function providerError(error) {
+    return error instanceof ProviderClient.Error ? error.message : 'Provider-Anfrage fehlgeschlagen.';
   }
 
   async function boot() {
     loadLocalState();
+    loadProviderSettings();
     bindEvents();
 
     try {
-      const catalog = await getJson('./catalog.json');
-      if (!Array.isArray(catalog) || catalog.length === 0) throw new Error('Katalog ist leer.');
-      state.catalog = catalog;
-      const results = await Promise.all(catalog.map(async item => [item.id, await getJson(item.data)]));
-      state.podcasts = new Map(results);
-      const generatedAt = state.podcasts.values().next().value?.generatedAt;
-      const generatedDate = new Date(generatedAt);
-      if (generatedAt && !Number.isNaN(generatedDate.getTime())) {
-        const stamp = document.querySelector('#data-generated-at');
-        stamp.textContent = `Stand: ${new Intl.DateTimeFormat('de-DE', {
-          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        }).format(generatedDate)}`;
-        stamp.hidden = false;
-      }
-
-      if (!state.initialized) {
-        if (catalog.length === 1) state.subscriptions.add(catalog[0].id);
-        state.initialized = true;
-        persistLocalState();
-      }
-
-      cleanPlaylist();
-      el.statusPanel.hidden = true;
-      el.viewTabs.hidden = false;
-      render();
+      await loadProvider(state.providerConfig, state.providerToken);
     } catch (error) {
-      el.status.textContent = `Podcastdaten konnten nicht geladen werden: ${error.message}`;
+      el.status.textContent = `Podcastdaten konnten nicht geladen werden: ${providerError(error)}`;
     }
 
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -147,6 +235,51 @@
   }
 
   function bindEvents() {
+    el.providerUrl.addEventListener('input', () => {
+      if (el.providerUrl.value.trim() !== state.providerConfig.baseUrl) el.providerToken.value = '';
+    });
+    el.providerTest.addEventListener('click', async () => {
+      el.providerMessage.textContent = 'Verbindung wird getestet …';
+      try {
+        const baseUrl = ProviderClient.validateUrl(el.providerUrl.value);
+        const token = baseUrl === ProviderClient.DEFAULT_PROVIDER.baseUrl ? '' : el.providerToken.value.trim();
+        const catalog = await new ProviderClient(baseUrl, token).testConnection();
+        el.providerMessage.textContent = `Verbindung zu ${catalog.provider.name} erfolgreich.`;
+      } catch (error) {
+        el.providerMessage.textContent = providerError(error);
+      }
+    });
+    el.providerSave.addEventListener('click', async () => {
+      el.providerMessage.textContent = 'Provider wird geladen …';
+      try {
+        const config = await loadProvider({ baseUrl: el.providerUrl.value }, el.providerToken.value.trim());
+        if (!config) return;
+        persistProviderSettings(config, state.providerToken);
+        el.providerUrl.value = config.baseUrl;
+        el.providerToken.value = state.providerToken;
+        el.providerMessage.textContent = `Provider ${config.name} gespeichert.`;
+      } catch (error) {
+        el.providerMessage.textContent = providerError(error);
+      }
+    });
+    el.providerDemo.addEventListener('click', async () => {
+      const config = { ...ProviderClient.DEFAULT_PROVIDER };
+      persistProviderSettings(config, '');
+      state.providerConfig = config;
+      state.providerToken = '';
+      el.providerUrl.value = config.baseUrl;
+      el.providerToken.value = '';
+      el.providerActive.textContent = 'Aktiv: 0815 Demo Provider';
+      el.providerMessage.textContent = 'Demo-Provider wird geladen …';
+      clearProviderData();
+      try {
+        await loadProvider(config, '');
+        el.providerMessage.textContent = 'Demo-Provider aktiv.';
+      } catch (error) {
+        el.status.textContent = `Podcastdaten konnten nicht geladen werden: ${providerError(error)}`;
+        el.providerMessage.textContent = providerError(error);
+      }
+    });
     el.tabButtons.forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
     el.detailBack.addEventListener('click', closeDetail);
     el.sort.addEventListener('change', () => {
@@ -190,7 +323,7 @@
     el.audio.addEventListener('durationchange', updateProgress);
     el.audio.addEventListener('ended', () => {
       if (!state.currentEpisode) return;
-      setEpisodeStatus(state.currentEpisode.id, 'heard');
+      setEpisodeStatus(episodeKey(state.currentPodcast, state.currentEpisode), 'heard');
       persistLocalState();
       render();
       updateProgress();
@@ -212,7 +345,7 @@
   }
 
   function renderTabs() {
-    const playlistCount = allPlaylistEntries().length;
+    const playlistCount = Object.keys(state.playlist).length;
     el.playlistCount.textContent = `${playlistCount}/${PLAYLIST_LIMIT}`;
     el.tabButtons.forEach(button => button.classList.toggle('is-active', button.dataset.view === state.currentView));
     if (!state.detailPodcastId) {
@@ -251,6 +384,33 @@
     el.podcastFilter.value = state.filterPodcast;
   }
 
+  function episodeKey(podcast, episode) {
+    return `${podcast.id}:${episode.id}`;
+  }
+
+  function migrateLegacyEpisodeState() {
+    const counts = new Map();
+    for (const podcast of state.podcasts.values()) {
+      for (const episode of podcast.episodes) counts.set(episode.id, (counts.get(episode.id) || 0) + 1);
+    }
+    let changed = false;
+    for (const podcast of state.podcasts.values()) {
+      for (const episode of podcast.episodes) {
+        if (counts.get(episode.id) !== 1) continue;
+        const key = episodeKey(podcast, episode);
+        for (const values of [state.episodeStatus, state.playlist, state.positions]) {
+          if (Object.prototype.hasOwnProperty.call(values, episode.id)
+            && !Object.prototype.hasOwnProperty.call(values, key)) {
+            values[key] = values[episode.id];
+            delete values[episode.id];
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) persistLocalState();
+  }
+
   function getEpisodeStatus(id) {
     const status = state.episodeStatus[id];
     return ['heard', 'ignored'].includes(status) ? status : 'unheard';
@@ -275,7 +435,7 @@
       const podcast = state.podcasts.get(id);
       if (!podcast) continue;
       podcast.episodes
-        .filter(ep => getEpisodeStatus(ep.id) === 'unheard')
+        .filter(ep => getEpisodeStatus(episodeKey(podcast, ep)) === 'unheard')
         .slice(0, PER_PODCAST_INBOX_LIMIT)
         .forEach(episode => entries.push({ podcast, episode }));
     }
@@ -301,7 +461,7 @@
   function allPlaylistEntries() {
     const episodeIndex = new Map();
     for (const podcast of state.podcasts.values()) {
-      for (const episode of podcast.episodes) episodeIndex.set(episode.id, { podcast, episode });
+      for (const episode of podcast.episodes) episodeIndex.set(episodeKey(podcast, episode), { podcast, episode });
     }
 
     return Object.entries(state.playlist)
@@ -318,11 +478,9 @@
   }
 
   function cleanPlaylist() {
-    const known = new Set();
-    for (const podcast of state.podcasts.values()) podcast.episodes.forEach(ep => known.add(ep.id));
     let changed = false;
     for (const id of Object.keys(state.playlist)) {
-      if (!known.has(id) || getEpisodeStatus(id) !== 'unheard') {
+      if (getEpisodeStatus(id) !== 'unheard') {
         delete state.playlist[id];
         changed = true;
       }
@@ -335,11 +493,13 @@
     el.playlistList.replaceChildren();
     const entries = playlistEntries();
     if (entries.length === 0) {
-      el.playlistList.append(emptyNode('Noch nichts ausgewählt. Füge Folgen aus einer Podcast-Detailseite hinzu.'));
+      el.playlistList.append(emptyNode(Object.keys(state.playlist).length
+        ? 'Playlist-Folgen sind beim aktiven Provider derzeit nicht verfügbar.'
+        : 'Noch nichts ausgewählt. Füge Folgen aus einer Podcast-Detailseite hinzu.'));
     } else {
       entries.forEach(({ podcast, episode }) => el.playlistList.append(episodeNode(podcast, episode, { context: 'playlist' })));
     }
-    el.playlistCount.textContent = `${allPlaylistEntries().length}/${PLAYLIST_LIMIT}`;
+    el.playlistCount.textContent = `${Object.keys(state.playlist).length}/${PLAYLIST_LIMIT}`;
   }
 
   function renderPodcasts() {
@@ -459,7 +619,7 @@
   }
 
   function ignoreOlderUnheard(podcast) {
-    const unheard = podcast.episodes.filter(ep => getEpisodeStatus(ep.id) === 'unheard');
+    const unheard = podcast.episodes.filter(ep => getEpisodeStatus(episodeKey(podcast, ep)) === 'unheard');
     if (unheard.length <= 1) {
       showNotice('Es gibt keine älteren ungehörten Folgen zum Ausblenden.');
       return;
@@ -468,7 +628,7 @@
     let changed = 0;
     for (const episode of unheard) {
       if (episode.id === keepId) continue;
-      setEpisodeStatus(episode.id, 'ignored');
+      setEpisodeStatus(episodeKey(podcast, episode), 'ignored');
       changed += 1;
     }
     persistLocalState();
@@ -477,8 +637,9 @@
   }
 
   function episodeNode(podcast, episode, options = {}) {
-    const status = getEpisodeStatus(episode.id);
-    const inPlaylist = Object.prototype.hasOwnProperty.call(state.playlist, episode.id) && status === 'unheard';
+    const key = episodeKey(podcast, episode);
+    const status = getEpisodeStatus(key);
+    const inPlaylist = Object.prototype.hasOwnProperty.call(state.playlist, key) && status === 'unheard';
     const article = document.createElement('article');
     article.className = 'episode';
 
@@ -515,7 +676,7 @@
       playlistButton.type = 'button';
       playlistButton.textContent = inPlaylist ? 'Aus Playlist' : '+ Playlist';
       playlistButton.disabled = status !== 'unheard';
-      playlistButton.addEventListener('click', () => togglePlaylist(episode.id));
+      playlistButton.addEventListener('click', () => togglePlaylist(key));
       actions.append(playlistButton);
     }
 
@@ -523,7 +684,7 @@
     heardButton.type = 'button';
     heardButton.textContent = status === 'heard' ? 'Als nicht gehört' : 'Als gehört';
     heardButton.addEventListener('click', () => {
-      setEpisodeStatus(episode.id, status === 'heard' ? 'unheard' : 'heard');
+      setEpisodeStatus(key, status === 'heard' ? 'unheard' : 'heard');
       persistLocalState();
       render();
     });
@@ -534,7 +695,7 @@
       ignoreButton.type = 'button';
       ignoreButton.textContent = status === 'ignored' ? 'Wieder berücksichtigen' : 'Interessiert mich nicht';
       ignoreButton.addEventListener('click', () => {
-        setEpisodeStatus(episode.id, status === 'ignored' ? 'unheard' : 'ignored');
+        setEpisodeStatus(key, status === 'ignored' ? 'unheard' : 'ignored');
         persistLocalState();
         render();
       });
@@ -560,7 +721,7 @@
       return;
     }
     if (getEpisodeStatus(id) !== 'unheard') return;
-    if (allPlaylistEntries().length >= PLAYLIST_LIMIT) {
+    if (Object.keys(state.playlist).length >= PLAYLIST_LIMIT) {
       showNotice('Die Playlist hat 10 Folgen. Hör erst etwas weg.');
       return;
     }
@@ -578,7 +739,7 @@
 
   function loadEpisode(podcast, episode, autoplay) {
     if (!episode.audioUrl) return;
-    const isSameEpisode = state.currentEpisode?.id === episode.id;
+    const isSameEpisode = state.currentPodcast?.id === podcast.id && state.currentEpisode?.id === episode.id;
     if (!isSameEpisode) saveCurrentPosition();
     if (!isSameEpisode && state.restoreListener) {
       el.audio.removeEventListener('loadedmetadata', state.restoreListener);
@@ -591,9 +752,9 @@
     if (!isSameEpisode) {
       const token = ++state.restoreToken;
       state.restorePending = true;
-      const storedPosition = Number(state.positions[episode.id] || 0);
+      const storedPosition = Number(state.positions[episodeKey(podcast, episode)] || 0);
       const restore = () => {
-        if (token !== state.restoreToken || state.currentEpisode?.id !== episode.id) return;
+        if (token !== state.restoreToken || state.currentPodcast?.id !== podcast.id || state.currentEpisode?.id !== episode.id) return;
         if (storedPosition > 0 && (!Number.isFinite(el.audio.duration) || el.audio.duration <= 0)) return;
         if (Number.isFinite(storedPosition) && storedPosition > 0 && storedPosition < el.audio.duration - 3) {
           el.audio.currentTime = storedPosition;
@@ -624,7 +785,7 @@
 
   function saveCurrentPosition() {
     if (!state.currentEpisode || state.restorePending || !Number.isFinite(el.audio.currentTime)) return;
-    const id = state.currentEpisode.id;
+    const id = episodeKey(state.currentPodcast, state.currentEpisode);
     if (el.audio.currentTime <= 1 || getEpisodeStatus(id) !== 'unheard') delete state.positions[id];
     else state.positions[id] = Math.floor(el.audio.currentTime);
     persistLocalState();

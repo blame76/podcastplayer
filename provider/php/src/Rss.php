@@ -1,99 +1,17 @@
 <?php
 declare(strict_types=1);
 
+namespace PodcastProvider;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use RuntimeException;
+use SimpleXMLElement;
+use Throwable;
+
 const MAX_FEED_BYTES = 2_000_000;
 const MAX_REDIRECTS = 5;
-const USER_AGENT = '0815-podcast-feed-builder/0.3 (+static build; curated feeds)';
-
-if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
-    try {
-        runBuild($argv);
-    } catch (Throwable $e) {
-        fwrite(STDERR, "BUILD FAILED: {$e->getMessage()}\n");
-        exit(1);
-    }
-}
-
-function runBuild(array $args): void {
-    if (count($args) !== 1 && (count($args) !== 3 || $args[1] !== '--fixture')) {
-        throw new RuntimeException('Aufruf: bin/build [--fixture pfad/zum/feed.xml]');
-    }
-    $fixturePath = count($args) === 3 ? $args[2] : null;
-
-    $root = dirname(__DIR__);
-    $catalogPath = $root . '/catalog.json';
-    $publicDir = $root . '/public';
-    $siteDir = $root . '/_site';
-
-    requireExtensions(['curl', 'libxml', 'simplexml', 'mbstring']);
-    $catalog = readCatalog($catalogPath, $fixturePath === null);
-    $impressum = @file_get_contents($publicDir . '/impressum.html');
-    if ($impressum === false) throw new RuntimeException('Impressum konnte nicht gelesen werden.');
-    assertImpressumReady($impressum);
-    if ($fixturePath !== null && !is_file($fixturePath)) {
-        throw new RuntimeException("RSS-Fixture fehlt: {$fixturePath}");
-    }
-
-    recreateDirectory($siteDir);
-    copyDirectory($publicDir, $siteDir);
-    @mkdir($siteDir . '/data', 0775, true);
-
-    $generatedAt = gmdate('Y-m-d\TH:i:s\Z');
-    $publicCatalog = [];
-    foreach ($catalog as $entry) {
-        logLine(($fixturePath === null ? 'FETCH ' : 'FIXTURE ') . $entry['id'] . ' ' . ($fixturePath ?? $entry['feed']));
-        $xml = $fixturePath === null ? fetchFeed($entry['feed']) : file_get_contents($fixturePath);
-        if ($xml === false) throw new RuntimeException('RSS-Fixture konnte nicht gelesen werden.');
-        $podcast = parseRss($xml, $entry, $generatedAt);
-        $dataPath = 'data/' . $entry['id'] . '.json';
-        writeJson($siteDir . '/' . $dataPath, $podcast);
-        $publicCatalog[] = [
-            'id' => $entry['id'],
-            'title' => $podcast['title'],
-            'description' => $podcast['description'],
-            'homepage' => $podcast['homepage'],
-            'sourceFeed' => $entry['feed'],
-            'data' => './' . $dataPath,
-        ];
-        logLine('OK    ' . $entry['id'] . ' (' . count($podcast['episodes']) . ' Episoden)');
-    }
-
-    writeJson($siteDir . '/catalog.json', $publicCatalog);
-    logLine('BUILD OK -> ' . $siteDir);
-}
-
-function assertImpressumReady(string $html): void {
-    if (preg_match('/\[POSTANSCHRIFT|VOR EINER ÖFFENTLICHEN VERÖFFENTLICHUNG VERVOLLSTÄNDIGEN/iu', $html)) {
-        throw new RuntimeException('Impressum enthält einen Veröffentlichungs-Platzhalter.');
-    }
-}
-
-function requireExtensions(array $extensions): void {
-    foreach ($extensions as $extension) {
-        if (!extension_loaded($extension)) {
-            throw new RuntimeException("PHP-Erweiterung fehlt: {$extension}");
-        }
-    }
-}
-
-function readCatalog(string $path, bool $resolveHosts = true): array {
-    $raw = @file_get_contents($path);
-    if ($raw === false) throw new RuntimeException('catalog.json konnte nicht gelesen werden.');
-    $catalog = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-    if (!is_array($catalog) || $catalog === []) throw new RuntimeException('catalog.json ist leer.');
-
-    $ids = [];
-    foreach ($catalog as $entry) {
-        if (!is_array($entry)) throw new RuntimeException('Ungültiger Katalogeintrag.');
-        $id = $entry['id'] ?? '';
-        $feed = $entry['feed'] ?? '';
-        if (!preg_match('/^[a-z0-9][a-z0-9-]{1,63}$/', $id)) throw new RuntimeException("Ungültige Podcast-ID: {$id}");
-        if (isset($ids[$id])) throw new RuntimeException("Doppelte Podcast-ID: {$id}");
-        $ids[$id] = true;
-        assertSafePublicUrl($feed, $resolveHosts);
-    }
-    return $catalog;
-}
+const USER_AGENT = '0815-podcast-provider/1 (+operator allowlist)';
 
 function fetchFeed(string $url): string {
     for ($redirect = 0; $redirect <= MAX_REDIRECTS; $redirect++) {
@@ -254,7 +172,7 @@ function resolveUrl(string $base, string $location): string {
     return $origin . $dir . $location;
 }
 
-function parseRss(string $xml, array $entry, string $generatedAt): array {
+function parseRss(string $xml, array $entry): array {
     libxml_use_internal_errors(true);
     $rss = simplexml_load_string($xml, SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA);
     if ($rss === false) throw new RuntimeException('Feed ist kein lesbares XML/RSS.');
@@ -278,10 +196,6 @@ function parseRss(string $xml, array $entry, string $generatedAt): array {
         $rawAudioUrl = trim((string)($enclosure['url'] ?? ''));
         $audioUrl = safeAudioUrl($rawAudioUrl);
         if ($audioUrl === '') {
-            if ($rawAudioUrl !== '') {
-                $reason = str_starts_with(strtolower($rawAudioUrl), 'http://') ? 'HTTP-Audio ist durch die Runtime-CSP gesperrt' : 'ungültige Audio-URL';
-                fwrite(STDERR, 'WARNING: Episode "' . cleanText((string)$item->title, 120) . '" übersprungen: ' . $reason . ".\n");
-            }
             continue;
         }
 
@@ -322,9 +236,7 @@ function parseRss(string $xml, array $entry, string $generatedAt): array {
         'description' => $description,
         'author' => $author,
         'language' => $language,
-        'homepage' => $homepage,
-        'sourceFeed' => $entry['feed'],
-        'generatedAt' => $generatedAt,
+        'website' => $homepage,
         'episodes' => $episodes,
     ];
 }
@@ -368,41 +280,3 @@ function safeAudioUrl(string $value): string {
     $parts = parse_url($value);
     return strtolower((string)($parts['scheme'] ?? '')) === 'https' ? trim($value) : '';
 }
-
-function recreateDirectory(string $dir): void {
-    if (is_dir($dir)) removeDirectory($dir);
-    if (!mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException("Verzeichnis konnte nicht erstellt werden: {$dir}");
-}
-
-function removeDirectory(string $dir): void {
-    $items = scandir($dir);
-    if ($items === false) return;
-    foreach ($items as $item) {
-        if ($item === '.' || $item === '..') continue;
-        $path = $dir . '/' . $item;
-        if (is_dir($path)) removeDirectory($path); else unlink($path);
-    }
-    rmdir($dir);
-}
-
-function copyDirectory(string $source, string $destination): void {
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-    foreach ($iterator as $item) {
-        $target = $destination . '/' . $iterator->getSubPathName();
-        if ($item->isDir()) {
-            if (!is_dir($target)) mkdir($target, 0775, true);
-        } else {
-            copy($item->getPathname(), $target);
-        }
-    }
-}
-
-function writeJson(string $path, array $data): void {
-    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
-    if (@file_put_contents($path, $json) === false) throw new RuntimeException("Datei konnte nicht geschrieben werden: {$path}");
-}
-
-function logLine(string $message): void { fwrite(STDOUT, $message . "\n"); }

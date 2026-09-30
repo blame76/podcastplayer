@@ -1,128 +1,60 @@
-# 0815 Podcast v0.3 — achtsam, static-first
+# 0815 Podcast
 
-Ein bewusst kleiner Podcast-Player für einen **kuratierten Katalog**. Der Player soll nicht möglichst viel zum Hören anbieten, sondern helfen, weniger und bewusster zu hören.
-
-Der Player selbst ist vollständig statisch. RSS wird beim Build geladen, validiert und als statisches JSON für GitHub Pages oder beliebiges statisches Hosting erzeugt.
-
-## Testfeed
-
-Aktuell ist genau ein Feed freigegeben:
-
-- Der KI-Podcast (BR): `https://feeds.br.de/der-ki-podcast/feed.xml`
-
-## Produktmodell
-
-### Deine Abos → Nicht gehört
-
-- maximal 3 aktuelle ungehörte Folgen je Abo
-- insgesamt maximal 10 Folgen
-- sortierbar neueste / älteste zuerst
-- schneller Filter auf ein einzelnes abonniertes Podcast
-- gehört oder ausgeblendet verschwindet; dann rückt eine ältere ungehörte Folge nach
-
-> Hier ist nur Platz für 10 Titel. Hör was weg, dann wird aufgefüllt.
-
-### Playlist
-
-- bewusst manuell aus der Podcast-Detailseite befüllt
-- maximal 10 Folgen
-- Reihenfolge: zuerst hinzugefügt, zuerst angezeigt
-- gehört oder ausgeblendet verschwindet automatisch
-- keine zweite Playlist, keine Prioritäten, kein Drag & Drop
-
-### Podcast-Detail
-
-- alle Episoden, die der RSS-Feed liefert
-- 10 Folgen pro Seite
-- Podcastinformationen aus dem Feed
-- pro Folge: hören, Playlist, gehört/nicht gehört, „interessiert mich nicht“
-- „Alte Folgen ausblenden“ behält die aktuellste ungehörte Folge und setzt ältere ungehörte Folgen auf `ignored`
-
-Lokale Episodenzustände:
-
-- `unheard`
-- `heard`
-- `ignored`
-- Playlist-Mitgliedschaft separat
-
-## Player
-
-- Play/Pause
-- 10 Sekunden zurück / vor
-- zum Anfang
-- Scrubber
-- Abspielposition alle 5 Sekunden sowie bei Pause/Verlassen lokal gespeichert
-- `ended` markiert automatisch als gehört; danach startet bewusst weder die nächste Folge noch die Playlist
-- Media Session API für Sperrbildschirm/Kopfhörer, soweit unterstützt
+Ein kleiner statischer Podcast-Player für bewusstes Hören. Der Player spricht ausschließlich mit einem konfigurierbaren Feed Provider über normalisiertes JSON. Er enthält keine RSS-URLs, keinen XML-Parser und keine Daten eines konkreten Podcastanbieters.
 
 ## Architektur
 
 ```text
-catalog.json
-    ↓
-GitHub Action / lokaler Build
-    ↓
-RSS abrufen + validieren + normalisieren
-    ↓
-_site/catalog.json
-_site/data/<podcast>.json
-    ↓
-statischer PWA-Player
-    ↓
-localStorage: Abos, Status, Playlist, Position, Sortierung
+Podcast/RSS → eigener Feed Provider → normalisiertes JSON → 0815 Podcast Player
 ```
 
-Audio wird nicht gespiegelt. Beim Abspielen lädt der Browser die Audiodatei direkt vom Podcast-Anbieter.
+Der öffentliche Default ist der 0815 Demo Provider unter `https://blame76.com/0815/podcast-provider-demo/`. Er enthält ausschließlich den selbst erstellten **0815 Demo Podcast** mit drei synthetischen WAV-Dateien. Ist diese Adresse noch nicht bereitgestellt, kann derselbe Provider lokal gestartet und im Player eingetragen werden. Der Player kann statisch auf GitHub Pages oder einem anderen Host liegen; ein privater Provider darf auf einem unabhängigen Host laufen.
 
-## Nicht enthalten
+Der Provider Contract und eine Anleitung für private Betreiber stehen in [docs/feed-provider.md](docs/feed-provider.md). Die PHP-Referenz für klassische LAMP-Hosts steht in [provider/php/README.md](provider/php/README.md).
 
-Keine Suche, Empfehlungen, Accounts, Sync, öffentliche Feed-Eingabe, Kategorien, mehrere Playlists, Playlist-Reihenfolge per Drag & Drop, Geschwindigkeit, Sleep-Timer oder Offline-Audio.
+## Produktmodell
 
-## Build-Voraussetzungen
+- „Nicht gehört“: maximal 3 ungehörte Folgen je Abo und insgesamt 10
+- Playlist: manuell, global maximal 10
+- Podcast-Detail: alle gelieferten Episoden, 10 pro Seite
+- Status `unheard`, `heard`, `ignored`; Playlist-Zugehörigkeit separat
+- Gehört oder ignoriert entfernt Folgen aus Inbox und Playlist
+- „Alte Folgen ausblenden“ lässt die neueste ungehörte Folge bestehen
+- Play/Pause, 10 Sekunden vor/zurück, zum Anfang, Scrubber und Media Session
+- `ended` markiert als gehört; bewusst kein automatischer Start der nächsten Folge
 
-- PHP CLI
-- ext-curl
-- ext-libxml / SimpleXML
-- ext-mbstring
+Genau ein Provider ist gleichzeitig aktiv. Die kleine Einstellung im Player erlaubt URL, optionalen Token, Verbindungstest, Speichern und Rückkehr zum Demo Provider. Providerwechsel löschen lokale Hörstände nicht. Nicht verfügbare Podcast-IDs bleiben lokal gespeichert.
 
-Unter Debian/Ubuntu z. B.:
+## Lokal starten
+
+Voraussetzungen: PHP 8.x mit cURL, SimpleXML und mbstring; Node.js für die Tests. Keine Composer- oder npm-Abhängigkeiten.
 
 ```bash
-sudo apt install php-cli php-curl php-xml php-mbstring
-```
-
-## Lokal testen
-
-```bash
-./bin/test
-./bin/build
+bin/test
+bin/build
 php -S 127.0.0.1:8080 -t _site
 ```
 
-Dann `http://127.0.0.1:8080/` öffnen.
+In einem zweiten Terminal den lokalen Demo Provider starten:
 
-`./bin/build` benötigt Internetzugriff zu den kuratierten RSS-Feeds. Scheitert Feed-Abruf oder Validierung, wird der Build abgebrochen. Für einen lokalen Build ohne Netzwerk: `./bin/build --fixture tests/fixtures/podcast.xml`. Der Build verwirft HTTP-Audio mit Warnung und erzeugt nur HTTPS-Audio-URLs.
+```bash
+PODCAST_PROVIDER_BASE_URL=http://127.0.0.1:8001/ php -S 127.0.0.1:8001 -t provider/php provider/php/router.php
+```
 
-## GitHub Pages
+Im Player die Provider URL `http://127.0.0.1:8001/` eintragen und speichern. HTTP ist nur bei lokaler Entwicklung mit localhost, 127.0.0.1 oder IPv6-Loopback erlaubt. Produktive Provider-URLs müssen HTTPS verwenden.
 
-`.github/workflows/pages.yml` baut bei Push auf `main`, manuell und alle 3 Stunden. Podcastdaten entstehen nur im Build-Artefakt; es gibt keine automatischen Feed-Commits.
+`bin/build` kopiert nur die statische Player-Shell nach `_site`. Es ruft keine RSS-Feeds ab. Der Pages-Workflow führt zuerst `bin/test` aus und baut erst danach das statische Artefakt. Der Demo Provider wird separat bereitgestellt.
 
-Unter **Settings → Pages → Build and deployment → Source** `GitHub Actions` wählen.
+## Datenschutz
 
-## Feed-Sicherheit
+Abos, Hörstände, Playlist, Positionen und Provider-Konfiguration bleiben im Browser. Ein optionaler Bearer Token liegt unter einem eigenen lokalen Speicherschlüssel. **Ein im Browser gespeicherter Provider-Token ist ein lokales Geheimnis und darf nie in öffentlich ausgelieferten Sourcecode eingebettet werden.** Es gibt keine Accounts, Cookies, Analytics oder Synchronisierung.
 
-Der Build akzeptiert nur kuratierte URLs aus `catalog.json`, nur HTTP(S), nur Port 80/443 und keine lokalen/privaten/reservierten Ziel-IP-Adressen. Redirects werden einzeln erneut geprüft. Feed-Größe ist auf 2 MB begrenzt, DOCTYPE ist gesperrt und XML wird mit `LIBXML_NONET` geparst.
+Beim Öffnen des Players werden Katalog und Podcastdaten vom aktiven Provider angefragt. Für die Podcastdaten sendet der Player die IDs des aktiven Katalogs im JSON-Body eines POST-Requests, unabhängig von der Abo-Auswahl. Hörstände, Playlist und Positionen werden nicht gesendet. Der Provider und dessen Hosting können technisch IP-Adresse und Request-Metadaten verarbeiten. Beim Abspielen fordert der Browser Audio direkt vom angegebenen Audioanbieter an; auch dieser erhält technisch einen Request. Der Provider-Code selbst protokolliert keine Hörhistorie, Tokens oder Request-Bodies.
 
-Der Fetcher läuft nur während eines kontrollierten Builds und besitzt keine öffentliche URL-Eingabe.
+## Nicht enthalten
 
-## Datenschutzmodell
-
-**Static Host:** öffentlicher Katalog und normalisierte Podcast-Metadaten.
-
-**Browser lokal:** Abos, Episodenstatus, Playlist, Abspielposition und Sortierung.
-
-Beim Abspielen kontaktiert der Browser den Podcast-Anbieter direkt. Hosting- und Podcast-Anbieter sehen dabei technisch übliche Verbindungsdaten.
+Kein Offline-Audio, keine automatischen Downloads, keine RSS-Verwaltung oder Feed-Discovery im Player, keine Multi-Provider-Aggregation, keine Accounts und keine zentrale Hörhistorie.
 
 ## Lizenz
 
-MIT für den eigenen Quellcode. Podcast-Metadaten und Audiodateien bleiben Inhalte der jeweiligen Anbieter.
+MIT für den eigenen Quellcode. Betreiber eigener Provider sind für die Zulässigkeit ihrer eingebundenen Feeds und Inhalte selbst verantwortlich.

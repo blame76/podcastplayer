@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/tools/build.php';
+require dirname(__DIR__) . '/provider/php/src/Rss.php';
+require dirname(__DIR__) . '/tools/build-site.php';
 
 function expectSame(mixed $expected, mixed $actual, string $label): void {
     if ($expected !== $actual) {
@@ -20,11 +21,10 @@ $entry = [
     'feed' => 'https://example.org/feed.xml',
     'homepage' => 'https://example.org/podcast'
 ];
-$generatedAt = '2026-09-29T10:15:00Z';
-$podcast = parseRss($xml, $entry, $generatedAt);
+$podcast = \PodcastProvider\parseRss($xml, $entry);
 
 expectSame(
-    ['id', 'title', 'description', 'author', 'language', 'homepage', 'sourceFeed', 'generatedAt', 'episodes'],
+    ['id', 'title', 'description', 'author', 'language', 'website', 'episodes'],
     array_keys($podcast),
     'podcast JSON structure'
 );
@@ -32,7 +32,6 @@ expectSame('fixture-podcast', $podcast['id'], 'podcast id');
 expectSame('Fixture Podcast', $podcast['title'], 'podcast title');
 expectSame('Ein Test & Beispiel.', $podcast['description'], 'channel HTML cleanup');
 expectSame('Fixture Redaktion', $podcast['author'], 'podcast author');
-expectSame($generatedAt, $podcast['generatedAt'], 'generatedAt');
 expectSame(2, count($podcast['episodes']), 'missing and HTTP enclosures skipped');
 
 $episode = $podcast['episodes'][0];

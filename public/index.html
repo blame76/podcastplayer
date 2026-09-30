@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src https:; img-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; media-src https: http://localhost:* http://127.0.0.1:* http://[::1]:*; img-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="Ein kleiner, datensparsamer Podcast-Player für bewusstes Hören.">
   <title>0815 Podcast</title>
@@ -20,6 +20,24 @@
   </header>
 
   <main id="app" class="app-shell">
+    <details class="panel provider-settings" id="provider-settings">
+      <summary>Feed Provider</summary>
+      <p id="provider-active" class="meta">Aktiv: 0815 Demo Provider</p>
+      <div class="provider-fields">
+        <label>Provider URL
+          <input id="provider-url" type="url" inputmode="url" autocomplete="url" placeholder="https://example.org/podcast-provider/">
+        </label>
+        <label>Token, falls erforderlich
+          <input id="provider-token" type="password" autocomplete="off">
+        </label>
+      </div>
+      <div class="provider-actions">
+        <button type="button" id="provider-test">Verbindung testen</button>
+        <button type="button" id="provider-save">Speichern</button>
+        <button type="button" id="provider-demo">Demo-Provider verwenden</button>
+      </div>
+      <p id="provider-message" class="meta" role="status" aria-live="polite"></p>
+    </details>
     <section class="panel" id="status-panel" aria-live="polite">
       <p id="app-status">Podcastdaten werden geladen …</p>
     </section>
@@ -114,6 +132,7 @@
     <audio id="audio" preload="metadata"></audio>
   </section>
 
+  <script src="./assets/provider-client.js" defer></script>
   <script src="./assets/app.js" defer></script>
 </body>
 </html>

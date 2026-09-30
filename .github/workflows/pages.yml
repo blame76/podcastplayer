@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
       - name: Test
         run: bin/test
-      - name: Fetch feeds and build site
+      - name: Build static player
         run: bin/build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

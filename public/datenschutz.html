@@ -14,11 +14,13 @@
       <h1>Datenschutz</h1>
       <p>0815 Podcast verwendet kein Benutzerkonto, keine Analyse- oder Trackingdienste und keine Werbenetzwerke.</p>
       <h2>Lokale Speicherung</h2>
-      <p>Abonnements, Episodenstatus (gehört/ausgeblendet), Playlist, Sortierung und Abspielpositionen werden ausschließlich im lokalen Browserspeicher des verwendeten Geräts gespeichert. Diese Daten werden von der Anwendung nicht an einen eigenen Server übertragen.</p>
-      <h2>Podcastdaten</h2>
-      <p>Der öffentliche Podcast-Katalog und die Episoden-Metadaten werden als statische Dateien ausgeliefert. Beim Abspielen einer Episode ruft dein Browser die Audiodatei direkt beim jeweiligen Podcast-Anbieter ab. Dieser Anbieter erhält dadurch die technisch üblichen Verbindungsdaten, insbesondere die IP-Adresse.</p>
+      <p>Abonnements, Episodenstatus (gehört/ausgeblendet), Playlist, Sortierung, Abspielpositionen, Provider-Adresse und ein gegebenenfalls eingegebener Provider-Token werden ausschließlich im lokalen Browserspeicher dieses Geräts gespeichert. Hörstände, Playlist und Positionen werden nicht an den Provider übertragen.</p>
+      <h2>Feed Provider</h2>
+      <p>Du wählst die Provider-Adresse selbst. Ohne eigene Konfiguration nutzt der Player den öffentlichen 0815 Demo Provider. Ein privater Provider kann einen Bearer Token verlangen. Beim Öffnen ruft der Browser den Katalog und die Podcastdaten beim aktiven Provider ab; dazu sendet er die IDs des aktiven Katalogs im Body einer POST-Anfrage, unabhängig von deiner Abo-Auswahl. Der Provider erhält technisch die IP-Adresse und Request-Metadaten. Der Provider-Code speichert keine Hörhistorie.</p>
+      <h2>Podcast-Audio</h2>
+      <p>Beim Abspielen ruft dein Browser die Audiodatei direkt von der im Provider-Datensatz angegebenen Adresse ab. Der jeweilige Audioanbieter erhält dabei technisch die IP-Adresse und Request-Metadaten.</p>
       <h2>Hosting</h2>
-      <p>Beim Abruf dieser Website verarbeitet der jeweilige Hosting-Anbieter technisch notwendige Verbindungsdaten. Welche Protokolldaten gespeichert werden und wie lange, richtet sich nach dem tatsächlich verwendeten Hosting. Diese Testfassung macht dazu bewusst keine erfundene Angabe.</p>
+      <p>Hosting-Anbieter des Players und des Providers können technisch notwendige Serverlogs führen. Umfang und Aufbewahrungsdauer hängen vom jeweiligen Hosting ab.</p>
       <p><a href="./">← Zurück zum Player</a></p>
     </section>
   </main>
