@@ -63,11 +63,17 @@ jobs:
       - name: Configure Strato SSH identity and host key
         env:
           DEPLOY_KEY: ${{ secrets.PODCAST_SFTP_PRIVATE_KEY }}
-          KNOWN_HOSTS: ${{ secrets.PODCAST_SFTP_KNOWN_HOSTS }}
+          KNOWN_HOSTS: ${{ secrets.PODCAST_SFTP_KNOWN_HOSTS || vars.PODCAST_SFTP_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          test -n "$DEPLOY_KEY"
-          test -n "$KNOWN_HOSTS"
+          if [[ -z "$DEPLOY_KEY" ]]; then
+            echo '::error::PODCAST_SFTP_PRIVATE_KEY fehlt im github-pages-Environment.'
+            exit 1
+          fi
+          if [[ -z "$KNOWN_HOSTS" ]]; then
+            echo '::error::PODCAST_SFTP_KNOWN_HOSTS fehlt im github-pages-Environment (Secret oder Variable).'
+            exit 1
+          fi
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
           printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"

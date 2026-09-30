@@ -28,6 +28,8 @@ Unter **Repository → Settings → Environments → github-pages** die folgende
 | --- | --- | --- |
 | Secret | `PODCAST_SFTP_PRIVATE_KEY` | Vollständiger privater OpenSSH Key des Strato Deploy Zugangs, mit Zeilenumbrüchen |
 | Secret | `PODCAST_SFTP_KNOWN_HOSTS` | Verifizierter OpenSSH `known_hosts`-Eintrag für den Strato Host |
+
+`PODCAST_SFTP_KNOWN_HOSTS` darf alternativ als **Environment Variable** angelegt werden; ein SSH Host Key ist öffentlich. Der Name muss exakt stimmen und der Wert eine vollständige `known_hosts`-Zeile für Host und Port sein. Ein leerer Wert stoppt den Upload vor dem SFTP-Aufruf.
 | Variable | `PODCAST_SFTP_HOST` | Strato SFTP Hostname aus dem Kundenlogin |
 | Variable | `PODCAST_SFTP_USER` | Strato Benutzername dieses Zugangs |
 | Variable | `PODCAST_SFTP_PORT` | Port, üblicherweise `22`; leer verwendet `22` |
