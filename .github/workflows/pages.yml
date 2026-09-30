@@ -17,7 +17,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: github-pages
+    outputs:
+      deploy_enabled: ${{ steps.deploy_gate.outputs.enabled }}
     steps:
+      - name: Read deployment switch from github-pages environment
+        id: deploy_gate
+        env:
+          DEPLOY_ENABLED: ${{ vars.PODCAST_DEPLOY_ENABLED }}
+        run: |
+          if [[ "$DEPLOY_ENABLED" == 'true' ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
@@ -31,14 +44,15 @@ jobs:
       - name: Build static player
         run: bin/build
       - uses: actions/configure-pages@v5
-        if: vars.PODCAST_DEPLOY_ENABLED == 'true'
+        if: steps.deploy_gate.outputs.enabled == 'true'
       - uses: actions/upload-pages-artifact@v3
-        if: vars.PODCAST_DEPLOY_ENABLED == 'true'
+        if: steps.deploy_gate.outputs.enabled == 'true'
         with:
           path: _site
 
   deploy-provider:
-    if: vars.PODCAST_DEPLOY_ENABLED == 'true'
+    if: needs.build.outputs.deploy_enabled == 'true'
+    environment: github-pages
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -72,7 +86,7 @@ jobs:
         run: bin/verify-provider-demo
 
   deploy-pages:
-    if: vars.PODCAST_DEPLOY_ENABLED == 'true'
+    if: needs.build.outputs.deploy_enabled == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
