@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; media-src https: http://localhost:* http://127.0.0.1:* http://[::1]:*; img-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; media-src https: blob: http://localhost:* http://127.0.0.1:* http://[::1]:*; img-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="Ein kleiner, datensparsamer Podcast-Player für bewusstes Hören.">
   <title>0815 Podcast</title>
@@ -38,8 +38,17 @@
       </div>
       <p id="provider-message" class="meta" role="status" aria-live="polite"></p>
     </details>
+    <section class="panel refresh-panel" aria-labelledby="refresh-heading">
+      <div>
+        <h2 id="refresh-heading">Podcastdaten</h2>
+        <p class="meta">Lädt den aktuellen Podcast-Katalog neu. Deine Abos, Hörstände und Playlist bleiben unverändert.</p>
+      </div>
+      <button type="button" id="provider-refresh" class="primary">Podcasts neu laden</button>
+      <p id="refresh-message" class="meta" role="status" aria-live="polite"></p>
+    </section>
     <section class="panel" id="status-panel" aria-live="polite">
-      <p id="app-status">Podcastdaten werden geladen …</p>
+      <p id="app-status">Noch keine Podcastdaten geladen.</p>
+      <p class="meta">„Podcasts neu laden“ lädt die Podcastdaten vom aktiven Feed Provider.</p>
     </section>
 
     <div class="view-bar" id="view-tabs" hidden>
@@ -101,6 +110,13 @@
       <div id="podcast-detail"></div>
     </section>
 
+    <section class="panel offline-settings" aria-labelledby="offline-heading">
+      <h2 id="offline-heading">Offline</h2>
+      <label><input type="checkbox" id="auto-cleanup" checked> Gehörte Offline-Folgen automatisch nach 15 Minuten löschen</label>
+      <button type="button" id="cleanup-now">Gehörte Offline-Folgen jetzt löschen</button>
+      <p id="cleanup-message" class="meta" role="status" aria-live="polite"></p>
+    </section>
+
     <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
   </main>
 
@@ -133,6 +149,7 @@
   </section>
 
   <script src="./assets/provider-client.js" defer></script>
+  <script src="./assets/local-store.js" defer></script>
   <script src="./assets/app.js" defer></script>
 </body>
 </html>

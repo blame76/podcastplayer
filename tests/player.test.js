@@ -89,8 +89,25 @@ const mediaSession = {
   setActionHandler: (action, handler) => { handlers[action] = handler; },
   setPositionState: value => { positions.push(value); }
 };
+class FakeStore {
+  constructor() {
+    this.snapshots = FakeStore.snapshots;
+    this.audio = FakeStore.audio;
+  }
+  async getProviderSnapshot(baseUrl) { return this.snapshots.get(baseUrl); }
+  async putProviderSnapshot(snapshot) { this.snapshots.set(snapshot.providerBaseUrl, snapshot); }
+  async getOfflineAudio(baseUrl, key) { return this.audio.get(JSON.stringify([baseUrl, key])); }
+  async putOfflineAudio(baseUrl, key, blob, audioUrl) {
+    this.audio.set(JSON.stringify([baseUrl, key]), { providerBaseUrl: baseUrl, episodeKey: key, blob, audioUrl });
+  }
+  async deleteOfflineAudio(baseUrl, key) { this.audio.delete(JSON.stringify([baseUrl, key])); }
+  async listOfflineAudio() { return [...this.audio.values()]; }
+}
+FakeStore.snapshots = new Map();
+FakeStore.audio = new Map();
+
 const context = {
-  document, window, localStorage,
+  document, window, localStorage, LocalStore: FakeStore,
   navigator: { mediaSession },
   location: { protocol: 'file:', hostname: '127.0.0.1' },
   fetch: () => new Promise(() => {}),
@@ -101,18 +118,20 @@ const context = {
 vm.runInNewContext(fs.readFileSync('public/assets/provider-client.js', 'utf8'), context, { filename: 'provider-client.js' });
 context.ProviderClient = window.ProviderClient;
 const source = fs.readFileSync('public/assets/app.js', 'utf8');
-const instrumented = source.replace('  boot();\n})();', '  globalThis.__playerTest = { state, loadEpisode, saveCurrentPosition, updateProgress, loadProvider, inboxEntries, togglePlaylist, ignoreOlderUnheard, getEpisodeStatus, setEpisodeStatus };\n  boot();\n})();');
-assert.notEqual(instrumented, source, 'player test hooks injected');
+const instrumented = source.replace('  boot();\n})();', '  globalThis.__playerTest = { state, loadEpisode, saveCurrentPosition, updateProgress, switchProvider, inboxEntries, togglePlaylist, ignoreOlderUnheard, getEpisodeStatus, setEpisodeStatus };\n  globalThis.__playerTest.bootPromise = boot();\n})();');
+assert.ok(instrumented !== source, 'player test hooks injected');
 vm.runInNewContext(instrumented, context, { filename: 'app.js' });
-const { state, loadEpisode, updateProgress, loadProvider, inboxEntries, togglePlaylist, ignoreOlderUnheard, getEpisodeStatus, setEpisodeStatus } = context.__playerTest;
+const { state, loadEpisode, updateProgress, switchProvider, inboxEntries, togglePlaylist, ignoreOlderUnheard, getEpisodeStatus, setEpisodeStatus } = context.__playerTest;
 
+async function playerRegressionTests() {
+  await context.__playerTest.bootPromise;
 const podcast = { id: 'fixture', title: 'Fixture Podcast', author: 'Redaktion' };
 const first = { id: 'first', title: 'Erste Folge', audioUrl: 'https://example.org/first.mp3' };
 const second = { id: 'second', title: 'Zweite Folge', audioUrl: 'https://example.org/second.mp3' };
 assert.equal(state.positions['fixture:first'], 42);
 assert.equal(state.positions['fixture:second'], 65);
 
-loadEpisode(podcast, first, false);
+await loadEpisode(podcast, first, false);
 const oldRestore = state.restoreListener;
 assert.equal(state.restorePending, true);
 assert.equal(audio.listeners.get('loadedmetadata').size, 2);
@@ -122,7 +141,7 @@ document.dispatch('visibilitychange');
 assert.equal(state.positions['fixture:first'], 42, 'visibilitychange before metadata preserves position');
 assert.equal(JSON.parse(storage.get('0815podcast:v3')).positions['fixture:first'], 42);
 
-loadEpisode(podcast, second, false);
+await loadEpisode(podcast, second, false);
 assert.equal(audio.listeners.get('loadedmetadata').size, 2, 'only one active restore listener');
 assert.equal(audio.listeners.get('loadedmetadata').has(oldRestore), false);
 assert.equal(audio.listeners.get('durationchange').has(oldRestore), false);
@@ -142,9 +161,9 @@ audio.currentTime = 77;
 audio.dispatch('pause');
 assert.equal(state.positions['fixture:second'], 77, 'pause saves position');
 
-loadEpisode(podcast, first, false);
+await loadEpisode(podcast, first, false);
 const currentRestore = state.restoreListener;
-loadEpisode(podcast, first, false);
+await loadEpisode(podcast, first, false);
 assert.equal(state.restoreListener, currentRestore, 'reselecting pending episode keeps restore listener');
 audio.duration = 120;
 audio.dispatch('loadedmetadata');
@@ -176,8 +195,11 @@ assert.equal(positions.length, positionCount, 'unsupported position API is skipp
 const playsBeforeEnd = audio.playCount;
 audio.dispatch('ended');
 assert.equal(state.episodeStatus['fixture:first'], 'heard');
+assert.ok(state.heardAt['fixture:first'], 'ended records heardAt');
 assert.equal(state.positions['fixture:first'], undefined);
 assert.equal(audio.playCount, playsBeforeEnd, 'ended does not autoplay next episode');
+
+}
 
 async function providerSwitchTests() {
   const demoUrl = 'https://blame76.com/0815/podcast-provider-demo/';
@@ -218,7 +240,7 @@ async function providerSwitchTests() {
   state.positions['old-position'] = 37;
   state.playlist['old-position'] = 123;
   state.subscriptions.add('old-podcast');
-  await loadProvider({ baseUrl: demoUrl }, '');
+  await switchProvider({ baseUrl: demoUrl }, '');
   assert.equal(state.catalog[0].id, '0815-demo', 'demo provider loaded');
   assert.equal(state.episodeStatus['0815-demo:demo-episode'], 'heard', 'known legacy status migrated');
   assert.equal(state.episodeStatus['demo-episode'], undefined);
@@ -294,7 +316,7 @@ async function providerSwitchTests() {
   console.log('player restore, Media Session, provider switching and product limits OK');
 }
 
-providerSwitchTests().catch(error => {
+playerRegressionTests().then(providerSwitchTests).catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

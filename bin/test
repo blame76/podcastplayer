@@ -4,13 +4,20 @@ cd "$(dirname "$0")/.."
 
 find provider/php tools tests -name '*.php' -print0 | xargs -0 -n1 php -l
 node --check public/assets/provider-client.js
+node --check public/assets/local-store.js
 node --check public/assets/app.js
 node --check public/sw.js
 node --check tests/provider_client.test.js
 node --check tests/player.test.js
+node --check tests/local_store.test.js
+node --check tests/sw.test.js
+node --check tests/manual_refresh_offline.test.js
 php tests/rss_parser_test.php
 php tests/provider_php_test.php
 node tests/provider_client.test.js
 node tests/player.test.js
+node tests/local_store.test.js
+node tests/sw.test.js
+node tests/manual_refresh_offline.test.js
 
 echo "tests OK"

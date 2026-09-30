@@ -69,7 +69,8 @@
       data.provider.version !== '1' || data.provider.contract !== CONTRACT ||
       !validTimestamp(data.generatedAt) || !Array.isArray(data.podcasts) ||
       !data.podcasts.every(item => item && validPodcastId(item.id) &&
-        typeof item.title === 'string' && typeof item.description === 'string')) {
+        typeof item.title === 'string' && typeof item.description === 'string') ||
+      new Set(data.podcasts.map(item => item.id)).size !== data.podcasts.length) {
       throw new ProviderClientError('invalid_contract');
     }
     return data;
@@ -88,11 +89,13 @@
         throw new ProviderClientError('invalid_contract');
       }
       returned.add(podcast.id);
+      const episodeIds = new Set();
       for (const episode of podcast.episodes) {
-        if (!episode || typeof episode.id !== 'string' || !episode.id ||
+        if (!episode || typeof episode.id !== 'string' || !episode.id || episodeIds.has(episode.id) ||
           typeof episode.title !== 'string' || !validAudioUrl(episode.audioUrl)) {
           throw new ProviderClientError('invalid_contract');
         }
+        episodeIds.add(episode.id);
       }
     }
     return data;
@@ -155,6 +158,9 @@
   }
 
   ProviderClient.DEFAULT_PROVIDER = DEFAULT_PROVIDER;
+  ProviderClient.CONTRACT = CONTRACT;
+  ProviderClient.validateCatalog = validateCatalog;
+  ProviderClient.validatePodcasts = validatePodcasts;
   ProviderClient.Error = ProviderClientError;
   ProviderClient.validateUrl = validateProviderUrl;
   window.ProviderClient = ProviderClient;

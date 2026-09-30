@@ -55,6 +55,14 @@ async function main() {
     ok({ ...catalog, provider: { name: 'Wrong', version: '2' } }));
   await assert.rejects(wrongFormat.catalog(), error => error.code === 'invalid_contract');
 
+  const duplicateEpisodes = new ProviderClient('https://example.org/', '', async () => ok({
+    ...podcastResponse,
+    podcasts: [{ ...podcastResponse.podcasts[0], episodes: [
+      podcastResponse.podcasts[0].episodes[0], podcastResponse.podcasts[0].episodes[0]
+    ] }]
+  }));
+  await assert.rejects(duplicateEpisodes.podcasts(['0815-demo']), error => error.code === 'invalid_contract');
+
   const token = 'local-test-' + Math.random().toString(36).slice(2);
   let tokenRequest;
   const privateClient = new ProviderClient('https://private.example.org/podcast/', token, async (url, options) => {
