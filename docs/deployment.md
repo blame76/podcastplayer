@@ -38,7 +38,7 @@ Unter **Repository → Settings → Environments → github-pages** die folgende
 
 ## 3. Pages einschalten und Lauf starten
 
-Unter **Repository → Settings → Pages → Build and deployment → Source** **GitHub Actions** wählen. [GitHubs Anleitung für einen vorhandenen eigenen Workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow) beschreibt diese Auswahl. Danach die Umgebungsvariable `PODCAST_DEPLOY_ENABLED=true` setzen und den Workflow auf `main` manuell starten. Der Build-Job liest diesen Schalter aus der Umgebung und gibt ihn als Job-Output an die Deploy-Jobs weiter. Bei Erfolg sind die Adressen:
+Im `github-pages`-Environment unter **Deployment branches and tags** den Branch `main` zulassen. Ein aus der bisherigen Branch-Veröffentlichung stammendes Environment kann dort nur `gh-pages` erlauben; dann wird der Workflow bereits vor dem Build abgewiesen. Unter **Repository → Settings → Pages → Build and deployment → Source** **GitHub Actions** wählen. [GitHubs Anleitung für einen vorhandenen eigenen Workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow) beschreibt diese Auswahl. Danach die Umgebungsvariable `PODCAST_DEPLOY_ENABLED=true` setzen und den Workflow auf `main` manuell starten. Der Build-Job liest diesen Schalter aus der Umgebung und gibt ihn als Job-Output an die Deploy-Jobs weiter. Bei Erfolg sind die Adressen:
 
 - Provider: `https://blame76.com/0815/podcast-provider-demo/catalog`
 - Player: `https://blame76.github.io/podcastplayer/`
