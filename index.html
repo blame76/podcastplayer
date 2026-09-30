@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; media-src https: blob: http://localhost:* http://127.0.0.1:* http://[::1]:*; img-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Ein kleiner, datensparsamer Podcast-Player für bewusstes Hören.">
+  <title>0815 Podcast</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./assets/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">0815</p>
+      <h1>Podcast</h1>
+    </div>
+    <p class="tagline">Weniger sammeln. Bewusster hören.</p>
+  </header>
+
+  <main id="app" class="app-shell">
+    <details class="panel provider-settings" id="provider-settings">
+      <summary>Feed Provider</summary>
+      <p id="provider-active" class="meta">Aktiv: 0815 Demo Provider</p>
+      <div class="provider-fields">
+        <label>Provider URL
+          <input id="provider-url" type="url" inputmode="url" autocomplete="url" placeholder="https://example.org/podcast-provider/">
+        </label>
+        <label>Token, falls erforderlich
+          <input id="provider-token" type="password" autocomplete="off">
+        </label>
+      </div>
+      <div class="provider-actions">
+        <button type="button" id="provider-test">Verbindung testen</button>
+        <button type="button" id="provider-save">Speichern</button>
+        <button type="button" id="provider-demo">Demo-Provider verwenden</button>
+      </div>
+      <p id="provider-message" class="meta" role="status" aria-live="polite"></p>
+    </details>
+    <section class="panel refresh-panel" aria-labelledby="refresh-heading">
+      <div>
+        <h2 id="refresh-heading">Podcastdaten</h2>
+        <p class="meta">Lädt den aktuellen Podcast-Katalog neu. Deine Abos, Hörstände und Playlist bleiben unverändert.</p>
+      </div>
+      <button type="button" id="provider-refresh" class="primary">Podcasts neu laden</button>
+      <p id="refresh-message" class="meta" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel" id="status-panel" aria-live="polite">
+      <p id="app-status">Noch keine Podcastdaten geladen.</p>
+      <p class="meta">„Podcasts neu laden“ lädt die Podcastdaten vom aktiven Feed Provider.</p>
+    </section>
+
+    <div class="view-bar" id="view-tabs" hidden>
+      <nav class="view-tabs" aria-label="Ansichten">
+        <button type="button" class="tab is-active" data-view="subscriptions">Deine Abos</button>
+        <button type="button" class="tab" data-view="playlist">Playlist <span id="playlist-count">0/10</span></button>
+      </nav>
+      <label class="global-filter">
+        <span>Podcast</span>
+        <select id="podcast-filter"></select>
+      </label>
+    </div>
+
+    <section id="subscriptions-view" hidden>
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Deine Abos</p>
+            <h2>Nicht gehört</h2>
+            <p class="limit-note">Hier ist nur Platz für 10 Titel. Hör was weg, dann wird aufgefüllt.</p>
+          </div>
+          <div class="toolbar">
+            <label>
+              <span>Sortierung</span>
+              <select id="sort-order">
+                <option value="newest">Neueste zuerst</option>
+                <option value="oldest">Älteste zuerst</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div id="unheard-list" class="episode-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Kuratierter Katalog</p>
+            <h2>Podcasts</h2>
+          </div>
+        </div>
+        <div id="podcast-list" class="podcast-list"></div>
+      </section>
+    </section>
+
+    <section id="playlist-view" class="panel" hidden>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewusst ausgewählt</p>
+          <h2>Playlist</h2>
+          <p class="limit-note">Hier ist Platz für 10 Titel. Hör was weg, dann ist wieder Platz.</p>
+        </div>
+      </div>
+      <div id="playlist-list" class="episode-list"></div>
+    </section>
+
+    <section class="panel" id="detail-section" hidden>
+      <button type="button" class="text-button" id="detail-back">← Zurück</button>
+      <div id="podcast-detail"></div>
+    </section>
+
+    <section class="panel offline-settings" aria-labelledby="offline-heading">
+      <h2 id="offline-heading">Offline</h2>
+      <label><input type="checkbox" id="auto-cleanup" checked> Gehörte Offline-Folgen automatisch nach 15 Minuten löschen</label>
+      <button type="button" id="cleanup-now">Gehörte Offline-Folgen jetzt löschen</button>
+      <p id="cleanup-message" class="meta" role="status" aria-live="polite"></p>
+    </section>
+
+    <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+  </main>
+
+  <footer class="site-footer">
+    <a href="./datenschutz.html">Datenschutz</a>
+    <a href="./impressum.html">Impressum</a>
+    <span id="data-generated-at" class="data-generated-at" hidden></span>
+  </footer>
+
+  <section class="player" id="player" hidden aria-label="Podcast-Player">
+    <div class="player-copy">
+      <strong id="player-title">Keine Folge gewählt</strong>
+      <span id="player-podcast"></span>
+    </div>
+
+    <div class="player-controls" aria-label="Wiedergabesteuerung">
+      <button type="button" id="to-start" aria-label="Zum Anfang">|◀</button>
+      <button type="button" id="back-10" aria-label="10 Sekunden zurück">−10</button>
+      <button type="button" id="play-pause" aria-label="Abspielen">▶</button>
+      <button type="button" id="forward-10" aria-label="10 Sekunden vor">+10</button>
+    </div>
+
+    <div class="progress-row">
+      <span id="current-time">0:00</span>
+      <input id="progress" type="range" min="0" max="1000" value="0" aria-label="Abspielposition">
+      <span id="duration">0:00</span>
+    </div>
+
+    <audio id="audio" preload="metadata"></audio>
+  </section>
+
+  <script src="./assets/provider-client.js" defer></script>
+  <script src="./assets/local-store.js" defer></script>
+  <script src="./assets/app.js" defer></script>
+</body>
+</html>

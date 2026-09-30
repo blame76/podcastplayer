@@ -1,0 +1,22 @@
+{
+  "name": "0815 Podcast",
+  "short_name": "0815 Podcast",
+  "description": "Ein kleiner Podcast-Player für bewusstes Hören aus einem kuratierten Katalog.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f3",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "./assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
